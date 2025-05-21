@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unity Experiment Data Collector</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .container {
+      max-width: 1200px;
+      margin-top: 2rem;
+    }
+    .card {
+      margin-bottom: 1.5rem;
+    }
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem;
+      border-bottom: 1px solid #eee;
+    }
+    .file-item:last-child {
+      border-bottom: none;
+    }
+    .metadata-badge {
+      font-size: 0.8rem;
+      margin-left: 0.5rem;
+    }
+    .data-table {
+      overflow-x: auto;
+    }
+    .table-container {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="mb-4">Unity Experiment Data Collector</h1>
+    
+    <div class="row">
+      <div class="col-mt-4">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Collected Files</h5>
+            <button id="refreshBtn" class="btn btn-sm btn-outline-secondary">Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="filesList">
+              <p class="text-center text-muted">Loading files...</p>
+            </div>
+            <div class="text-center mt-3">
+              <a href="/api/download-all" class="btn btn-primary">Download All Files (ZIP)</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card mt-4">
+      <div class="card-header">
+        <h5 class="mb-0">Data Preview</h5>
+      </div>
+      <div class="card-body">
+        <div id="dataPreview">
+          <p class="text-center text-muted">Loading data preview...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for metadata display -->
+  <div class="modal fade" id="metadataModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">File Metadata</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <pre id="metadataContent"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // DOM elements
+    const filesList = document.getElementById('filesList');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const dataPreview = document.getElementById('dataPreview');
+    const metadataModal = new bootstrap.Modal(document.getElementById('metadataModal'));
+    const metadataContent = document.getElementById('metadataContent');
+
+    // Fetch and display files list
+    async function loadFiles() {
+      try {
+        const response = await fetch('/api/files');
+        const data = await response.json();
+        
+        if (data.files && data.files.length > 0) {
+          const filesHTML = data.files
+            .sort((a, b) => new Date(b.created) - new Date(a.created))
+            .map(file => {
+              const date = new Date(file.created).toLocaleString();
+              const size = formatFileSize(file.size);
+              const hasMetadata = Object.keys(file.metadata || {}).length > 0;
+              
+              return `
+                <div class="file-item">
+                  <div>
+                    <strong>${file.name}</strong>
+                    ${hasMetadata ? 
+                      `<span class="badge bg-info metadata-badge" 
+                            style="cursor: pointer;" 
+                            onclick="showMetadata('${encodeURIComponent(JSON.stringify(file.metadata))}')">
+                        Metadata
+                      </span>` : 
+                      ''}
+                    <br>
+                    <small class="text-muted">${date} - ${size}</small>
+                  </div>
+                  <a href="${file.path}" class="btn btn-sm btn-outline-primary" download>Download</a>
+                </div>
+              `;
+            })
+            .join('');
+          
+          filesList.innerHTML = filesHTML;
+        } else {
+          filesList.innerHTML = '<p class="text-center text-muted">No files uploaded yet</p>';
+        }
+      } catch (error) {
+        filesList.innerHTML = '<p class="text-center text-danger">Error loading files</p>';
+        console.error('Error loading files:', error);
+      }
+    }
+
+    // Load data preview with job polling
+    async function loadDataPreview() {
+      dataPreview.innerHTML = '<p class="text-center text-muted">Generating data preview...</p>';
+      
+      try {
+        // Step 1: Request preview generation
+        const initialResponse = await fetch('/api/preview');
+        const initialData = await initialResponse.json();
+        
+        if (!initialData.jobId) {
+          throw new Error('No job ID returned from preview request');
+        }
+        
+        const jobId = initialData.jobId;
+        
+        // Step 2: Poll for job completion
+        let completed = false;
+        let attempts = 0;
+        const maxAttempts = 20; // Maximum number of polling attempts
+        
+        while (!completed && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms between polls
+          
+          const pollResponse = await fetch(`/api/preview/${jobId}`);
+          
+          if (pollResponse.status === 200) {
+            // Job completed, show the data
+            const data = await pollResponse.json();
+            displayPreviewData(data);
+            completed = true;
+          } else if (pollResponse.status === 202) {
+            // Job still processing, continue polling
+            attempts++;
+          } else {
+            // Error occurred
+            throw new Error('Failed to get preview data');
+          }
+        }
+        
+        if (!completed) {
+          dataPreview.innerHTML = '<p class="text-center text-warning">Preview generation is taking longer than expected. Please try refreshing.</p>';
+        }
+      } catch (error) {
+        dataPreview.innerHTML = '<p class="text-center text-danger">Error loading data preview</p>';
+        console.error('Error loading data preview:', error);
+      }
+    }
+    
+    // Display preview data in the table
+    function displayPreviewData(data) {
+      if (data.headers && data.headers.length > 0 && data.preview && data.preview.length > 0) {
+        // Include file source column
+        const headers = ['Source File', ...data.headers];
+        
+        // Create table HTML
+        let tableHTML = `
+          <div class="table-container">
+            <table class="table table-striped table-sm">
+              <thead>
+                <tr>
+                  ${headers.map(h => `<th>${h}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+        `;
+        
+        // Add rows
+        data.preview.forEach(row => {
+          tableHTML += `<tr>
+            <td>${row._file || 'unknown'}</td>
+            ${data.headers.map(header => `<td>${row[header] || ''}</td>`).join('')}
+          </tr>`;
+        });
+        
+        tableHTML += `
+              </tbody>
+            </table>
+          </div>
+          <p class="text-muted mt-2">
+            Showing preview of ${data.preview.length} rows from up to 5 files. 
+            ${data.files.length} total files available.
+          </p>
+        `;
+        
+        dataPreview.innerHTML = tableHTML;
+      } else {
+        dataPreview.innerHTML = '<p class="text-center text-muted">No data available for preview</p>';
+      }
+    }
+
+    // Format file size
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Show metadata in modal
+    window.showMetadata = function(metadataJson) {
+      try {
+        const metadata = JSON.parse(decodeURIComponent(metadataJson));
+        metadataContent.textContent = JSON.stringify(metadata, null, 2);
+        metadataModal.show();
+      } catch (error) {
+        console.error('Error parsing metadata:', error);
+      }
+    };
+
+    // Refresh button handler
+    refreshBtn.addEventListener('click', () => {
+      loadFiles();
+      loadDataPreview();
+    });
+
+    // Initial load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadFiles();
+      loadDataPreview();
+    });
+  </script>
+</body>
+</html>
