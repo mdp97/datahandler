@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Health Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .last-update {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .card-icon {
+            font-size: 2rem;
+            margin-right: 12px;
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+        }
+
+        .status-healthy {
+            background: #c6f6d5;
+            color: #2f855a;
+        }
+
+        .status-warning {
+            background: #fef5e7;
+            color: #d69e2e;
+        }
+
+        .status-error {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        .metric-value {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #48bb78, #38a169);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-warning {
+            background: linear-gradient(90deg, #ed8936, #dd6b20);
+        }
+
+        .progress-error {
+            background: linear-gradient(90deg, #f56565, #e53e3e);
+        }
+
+        .alerts-section {
+            margin-top: 20px;
+        }
+
+        .alert {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .alert-warning {
+            background: #fef5e7;
+            color: #d69e2e;
+            border-left: 4px solid #ed8936;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #c53030;
+            border-left: 4px solid #f56565;
+        }
+
+        .alert-icon {
+            margin-right: 8px;
+            font-size: 1.2rem;
+        }
+
+        .settings-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            min-width: 250px;
+        }
+
+        .settings-toggle {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .settings-group {
+            margin-bottom: 15px;
+        }
+
+        .settings-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        .settings-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .offline-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fed7d7;
+            color: #c53030;
+            padding: 20px 30px;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: 600;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        .chart-container {
+            height: 200px;
+            margin-top: 16px;
+            position: relative;
+        }
+
+        .chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .settings-panel {
+                position: relative;
+                top: auto;
+                right: auto;
+                margin-bottom: 20px;
+            }
+            
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Server Health Dashboard</h1>
+            <div class="last-update" id="lastUpdate">Loading...</div>
+        </div>
+
+        <div class="settings-panel" id="settingsPanel">
+            <button class="settings-toggle" onclick="toggleSettings()">⚙️ Settings</button>
+            <div id="settingsContent" style="display: none;">
+                <div class="settings-group">
+                    <label class="settings-label">Server URL:</label>
+                    <input type="text" class="settings-input" id="serverUrl" 
+                           placeholder="https://your-server.com" value="https://localhost:3000">
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Refresh Interval (seconds):</label>
+                    <input type="number" class="settings-input" id="refreshInterval" 
+                           value="30" min="5" max="300">
+                </div>
+                <button class="settings-toggle" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+
+        <div class="status-grid">
+            <!-- Server Status Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">🖥️</span>
+                    <h2 class="card-title">Server Status</h2>
+                </div>
+                <div id="serverStatus" class="status-indicator status-error">
+                    ⚠️ Checking...
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Response Time</span>
+                    <span class="metric-value" id="responseTime">--</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Uptime</span>
+                    <span class="metric-value" id="uptime">--</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Total Checks</span>
+                    <span class="metric-value" id="totalChecks">0</span>
+                </div>
+            </div>
+
+            <!-- Memory Usage Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">💾</span>
+                    <h2 class="card-title">Memory Usage</h2>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Heap Used</span>
+                    <span class="metric-value" id="heapUsed">--</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="heapProgress" style="width: 0%"></div>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">RSS Memory</span>
+                    <span class="metric-value" id="rssMemory">--</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">External</span>
+                    <span class="metric-value" id="externalMemory">--</span>
+                </div>
+            </div>
+
+            <!-- Queue Status Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">📋</span>
+                    <h2 class="card-title">Queue Status</h2>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Upload Queue</span>
+                    <span class="metric-value" id="uploadQueue">--</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="uploadProgress" style="width: 0%"></div>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Processing Queue</span>
+                    <span class="metric-value" id="processingQueue">--</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="processingProgress" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Alerts Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">🚨</span>
+                    <h2 class="card-title">Active Alerts</h2>
+                </div>
+                <div id="alertsContainer">
+                    <div style="color: #68d391; text-align: center; padding: 20px;">
+                        ✅ No active alerts
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="offlineIndicator" class="offline-indicator" style="display: none;">
+        ⚠️ Unable to connect to server<br>
+        <small>Retrying...</small>
+    </div>
+
+    <script>
+        class HealthDashboard {
+            constructor() {
+                this.serverUrl = localStorage.getItem('serverUrl') || 'https://marketing-experimente.duckdns.org:3000';
+                this.refreshInterval = parseInt(localStorage.getItem('refreshInterval')) || 30;
+                this.totalChecks = 0;
+                this.isOnline = true;
+                this.intervalId = null;
+                
+                // Initialize UI
+                document.getElementById('serverUrl').value = this.serverUrl;
+                document.getElementById('refreshInterval').value = this.refreshInterval;
+                
+                this.startMonitoring();
+            }
+
+            async fetchData(endpoint) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                
+                try {
+                    const response = await fetch(`${this.serverUrl}${endpoint}`, {
+                        signal: controller.signal,
+                        mode: 'cors'
+                    });
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    return await response.json();
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    throw error;
+                }
+            }
+
+            async checkHealth() {
+                const startTime = Date.now();
+                
+                try {
+                    const [health, metrics] = await Promise.all([
+                        this.fetchData('/api/health'),
+                        this.fetchData('/api/metrics')
+                    ]);
+                    
+                    const responseTime = Date.now() - startTime;
+                    
+                    return {
+                        success: true,
+                        health,
+                        metrics,
+                        responseTime,
+                        timestamp: new Date()
+                    };
+                } catch (error) {
+                    return {
+                        success: false,
+                        error: error.message,
+                        timestamp: new Date()
+                    };
+                }
+            }
+
+            updateUI(data) {
+                this.totalChecks++;
+                document.getElementById('totalChecks').textContent = this.totalChecks;
+                document.getElementById('lastUpdate').textContent = 
+                    `Last updated: ${data.timestamp.toLocaleTimeString()}`;
+
+                if (!data.success) {
+                    this.showOffline();
+                    document.getElementById('serverStatus').className = 'status-indicator status-error';
+                    document.getElementById('serverStatus').innerHTML = '❌ Server Offline';
+                    return;
+                }
+
+                this.hideOffline();
+                
+                // Update server status
+                const alerts = this.analyzeHealth(data);
+                const statusElement = document.getElementById('serverStatus');
+                
+                if (alerts.length === 0) {
+                    statusElement.className = 'status-indicator status-healthy';
+                    statusElement.innerHTML = '✅ Healthy';
+                } else {
+                    const hasErrors = alerts.some(a => a.level === 'ERROR');
+                    statusElement.className = `status-indicator ${hasErrors ? 'status-error' : 'status-warning'}`;
+                    statusElement.innerHTML = `${hasErrors ? '❌' : '⚠️'} ${hasErrors ? 'Error' : 'Warning'}`;
+                }
+
+                // Update metrics
+                document.getElementById('responseTime').textContent = `${data.responseTime}ms`;
+                document.getElementById('uptime').textContent = data.metrics.uptime || '--';
+
+                // Update memory
+                const heapUsed = parseInt(data.metrics.memoryUsage.heapUsed) || 0;
+                const heapTotal = parseInt(data.metrics.memoryUsage.heapTotal) || 100;
+                document.getElementById('heapUsed').textContent = data.metrics.memoryUsage.heapUsed || '--';
+                document.getElementById('rssMemory').textContent = data.metrics.memoryUsage.rss || '--';
+                document.getElementById('externalMemory').textContent = data.metrics.memoryUsage.external || '--';
+                
+                const heapPercentage = Math.min((heapUsed / heapTotal) * 100, 100);
+                const heapProgress = document.getElementById('heapProgress');
+                heapProgress.style.width = `${heapPercentage}%`;
+                heapProgress.className = `progress-fill ${heapPercentage > 80 ? 'progress-error' : heapPercentage > 60 ? 'progress-warning' : ''}`;
+
+                // Update queues
+                const uploadQueued = data.health.queues.uploads.queued || 0;
+                const uploadProcessing = data.health.queues.uploads.processing || 0;
+                const processingQueued = data.health.queues.processing.queued || 0;
+                const processingProcessing = data.health.queues.processing.processing || 0;
+
+                document.getElementById('uploadQueue').textContent = 
+                    `${uploadProcessing} processing, ${uploadQueued} queued`;
+                document.getElementById('processingQueue').textContent = 
+                    `${processingProcessing} processing, ${processingQueued} queued`;
+
+                // Update queue progress bars
+                const uploadProgress = document.getElementById('uploadProgress');
+                const uploadPercentage = Math.min((uploadQueued / 20) * 100, 100);
+                uploadProgress.style.width = `${uploadPercentage}%`;
+                uploadProgress.className = `progress-fill ${uploadPercentage > 80 ? 'progress-error' : uploadPercentage > 60 ? 'progress-warning' : ''}`;
+
+                const processingProgress = document.getElementById('processingProgress');
+                const processingPercentage = Math.min((processingQueued / 10) * 100, 100);
+                processingProgress.style.width = `${processingPercentage}%`;
+                processingProgress.className = `progress-fill ${processingPercentage > 80 ? 'progress-error' : processingPercentage > 60 ? 'progress-warning' : ''}`;
+
+                // Update alerts
+                this.updateAlerts(alerts);
+            }
+
+            analyzeHealth(data) {
+                const alerts = [];
+                
+                if (!data.success) return alerts;
+
+                // Check memory
+                const heapUsed = parseInt(data.metrics.memoryUsage.heapUsed) || 0;
+                if (heapUsed > 500) {
+                    alerts.push({
+                        level: 'WARNING',
+                        message: `High memory usage: ${heapUsed}MB`
+                    });
+                }
+
+                // Check response time
+                if (data.responseTime > 5000) {
+                    alerts.push({
+                        level: 'WARNING',
+                        message: `Slow response time: ${data.responseTime}ms`
+                    });
+                }
+
+                // Check queues
+                const uploadQueued = data.health.queues.uploads.queued || 0;
+                const processingQueued = data.health.queues.processing.queued || 0;
+
+                if (uploadQueued > 20) {
+                    alerts.push({
+                        level: 'WARNING',
+                        message: `Upload queue backing up: ${uploadQueued} items`
+                    });
+                }
+
+                if (processingQueued > 10) {
+                    alerts.push({
+                        level: 'WARNING',
+                        message: `Processing queue backing up: ${processingQueued} items`
+                    });
+                }
+
+                return alerts;
+            }
+
+            updateAlerts(alerts) {
+                const container = document.getElementById('alertsContainer');
+                
+                if (alerts.length === 0) {
+                    container.innerHTML = `
+                        <div style="color: #68d391; text-align: center; padding: 20px;">
+                            ✅ No active alerts
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = alerts.map(alert => `
+                    <div class="alert alert-${alert.level.toLowerCase()}">
+                        <span class="alert-icon">${alert.level === 'ERROR' ? '❌' : '⚠️'}</span>
+                        ${alert.message}
+                    </div>
+                `).join('');
+            }
+
+            showOffline() {
+                if (this.isOnline) {
+                    this.isOnline = false;
+                    document.getElementById('offlineIndicator').style.display = 'block';
+                }
+            }
+
+            hideOffline() {
+                if (!this.isOnline) {
+                    this.isOnline = true;
+                    document.getElementById('offlineIndicator').style.display = 'none';
+                }
+            }
+
+            async startMonitoring() {
+                const monitor = async () => {
+                    const data = await this.checkHealth();
+                    this.updateUI(data);
+                };
+
+                // Initial check
+                await monitor();
+                
+                // Set up interval
+                if (this.intervalId) {
+                    clearInterval(this.intervalId);
+                }
+                this.intervalId = setInterval(monitor, this.refreshInterval * 1000);
+            }
+
+            saveSettings() {
+                const newServerUrl = document.getElementById('serverUrl').value;
+                const newRefreshInterval = parseInt(document.getElementById('refreshInterval').value);
+                
+                if (newServerUrl !== this.serverUrl || newRefreshInterval !== this.refreshInterval) {
+                    this.serverUrl = newServerUrl;
+                    this.refreshInterval = newRefreshInterval;
+                    
+                    localStorage.setItem('serverUrl', this.serverUrl);
+                    localStorage.setItem('refreshInterval', this.refreshInterval);
+                    
+                    this.startMonitoring();
+                }
+                
+                this.toggleSettings();
+            }
+
+            toggleSettings() {
+                const content = document.getElementById('settingsContent');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        // Global functions for HTML onclick handlers
+        function toggleSettings() {
+            dashboard.toggleSettings();
+        }
+
+        function saveSettings() {
+            dashboard.saveSettings();
+        }
+
+        // Initialize dashboard
+        const dashboard = new HealthDashboard();
+    </script>
+</body>
+</html>

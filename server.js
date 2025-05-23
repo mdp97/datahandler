@@ -77,7 +77,7 @@ app.use(express.static('public'));
 const rateLimit = require('express-rate-limit');
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 50, // 50 requests per minute
+  max: 300, // 200 requests per minute
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' }
@@ -436,9 +436,10 @@ setInterval(() => {
 }, 3600000); // Run every hour
 
 // Start the server
-https.createServer(sslOptions, app).listen(PORT, () => {
-  console.log(`HTTPS server running on port ${PORT}`);
+https.createServer(sslOptions, app).listen(PORT, '0.0.0.0', () => {
+  console.log(`HTTPS server running on https://0.0.0.0:${PORT}`);
 });
+
 
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
